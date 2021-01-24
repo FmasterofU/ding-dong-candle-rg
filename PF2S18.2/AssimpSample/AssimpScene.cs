@@ -15,6 +15,8 @@ using System.IO;
 using System.Reflection;
 using SharpGL.SceneGraph;
 using SharpGL;
+using System.Drawing;
+using System.Drawing.Imaging;
 
 namespace AssimpSample
 {
@@ -55,7 +57,17 @@ namespace AssimpSample
         /////</summary>
         //private Random m_random;
         int x = 0;
-        int y = 0; 
+        int y = 0;
+
+        /// <summary>
+        ///	 Identifikator tekstura.
+        /// </summary>
+        private uint[] m_texIds;
+
+        /// <summary>
+        ///	 Mapiranje teksture na njen identifikator.
+        /// </summary>
+        private Dictionary<TextureSlot, uint> m_texMappings;
 
         #endregion
 
@@ -84,6 +96,7 @@ namespace AssimpSample
             this.m_scenePath = scenePath;
             this.m_sceneFileName = sceneFileName;
             this.gl = gl;
+            this.m_texMappings = new Dictionary<TextureSlot, uint>(); //new
         }
 
         /// <summary>
@@ -133,11 +146,19 @@ namespace AssimpSample
         ///  Inicijalizacija i podesavanje OpenGL parametara.
         /// </summary>
         public void Initialize()
-        { 
+        {
+            LoadTextures();
             lista = new DisplayList();
             lista.Generate(gl);
             lista.New(gl, DisplayList.DisplayListMode.Compile);
-            gl.Color(0.3f, 0.3f, 0.3f);
+            //gl.Color(0.3f, 0.3f, 0.3f);
+            gl.PushAttrib(OpenGL.GL_ENABLE_BIT);
+            gl.PushAttrib(OpenGL.GL_TEXTURE_BIT);
+            gl.PushAttrib(OpenGL.GL_POLYGON_BIT);
+            gl.PushAttrib(OpenGL.GL_CURRENT_BIT);
+            gl.Enable(OpenGL.GL_TEXTURE_2D);
+            gl.Enable(OpenGL.GL_CULL_FACE);
+            gl.FrontFace(OpenGL.GL_CCW);
             for (int i = 0; i < m_scene.Count; i++)
             {
                 if (i == 1)
@@ -152,6 +173,10 @@ namespace AssimpSample
                     gl.Scale(0.5f, 0.5f, 0.5f);
                 }
             }
+            gl.PopAttrib();
+            gl.PopAttrib();
+            gl.PopAttrib();
+            gl.PopAttrib();
             lista.End(gl);
         }
 
@@ -175,7 +200,36 @@ namespace AssimpSample
                 {
                     Mesh mesh = render_m_scene.Meshes[meshIndex];
                     y++;
+                    Material material = render_m_scene.Materials[mesh.MaterialIndex];
+
+                    // Primena komponenti materijala datog objekta.
+                    ApplyMaterial(material);
+
+                    // Primena teksture u slucaju da je ista definisana za dati materijal.
+                    if (material.GetAllTextures().Length > 0)
+                        gl.BindTexture(OpenGL.GL_TEXTURE_2D, m_texMappings[material.GetAllTextures()[0]]);
+
+                    // Podesavanje proracuna osvetljenja za dati objekat.
+                    bool hasNormals = mesh.HasNormals;
+                    if (hasNormals)
+                        gl.Enable(OpenGL.GL_LIGHTING);
+                    else
+                        gl.Disable(OpenGL.GL_LIGHTING);
+
+                    // Podesavanje color tracking mehanizma za dati objekat.
                     bool hasColors = mesh.HasVertexColors(0);
+                    if (hasColors)
+                        gl.Enable(OpenGL.GL_COLOR_MATERIAL);
+                    else
+                        gl.Disable(OpenGL.GL_COLOR_MATERIAL);
+
+                    // Podesavanje rezima mapiranja na teksture.
+                    bool hasTexCoords = material.GetAllTextures().Length > 0 && mesh.HasTextureCoords(0);
+                    if (hasTexCoords)
+                        gl.Enable(OpenGL.GL_TEXTURE_2D);
+                    else
+                        gl.Disable(OpenGL.GL_TEXTURE_2D);
+
                     uint brojPoli = mesh.Faces[0].IndexCount;
 
                     // Iscrtavanje primitiva koji cine dati objekat.
@@ -200,7 +254,27 @@ namespace AssimpSample
                         }
                         //gl.Begin(OpenGL.GL_TRIANGLES);
 
+
                         for (int i = 0; i < face.IndexCount; i++)
+                        {
+                            uint indice = face.Indices[i];
+
+                            // Definisanje boje temena.
+                            if (hasColors)
+                                gl.Color(mesh.GetVertexColors(0)[indice].R, mesh.GetVertexColors(0)[indice].G, mesh.GetVertexColors(0)[indice].B, mesh.GetVertexColors(0)[indice].A);
+
+                            // Definisanje normale temena.
+                            if (hasNormals)
+                                gl.Normal(mesh.Normals[indice].X, mesh.Normals[indice].Y, mesh.Normals[indice].Z);
+
+                            // Definisanje koordinata teksture temena.
+                            if (hasTexCoords)
+                                gl.TexCoord(mesh.GetTextureCoords(0)[indice].X, 1 - mesh.GetTextureCoords(0)[indice].Y);
+
+                            // Definisanje temena primitive.
+                            gl.Vertex(mesh.Vertices[indice].X, mesh.Vertices[indice].Y, mesh.Vertices[indice].Z);
+                        }
+                        /*for (int i = 0; i < face.IndexCount; i++)
                         {
                             uint vertexIndex = face.Indices[i];
 
@@ -217,7 +291,7 @@ namespace AssimpSample
                             }
                             // Definisanje temena primitive.
                             gl.Vertex(mesh.Vertices[vertexIndex].X, mesh.Vertices[vertexIndex].Y, mesh.Vertices[vertexIndex].Z);
-                        }
+                        }*/
                         gl.End();
                     }
                 }
@@ -229,6 +303,90 @@ namespace AssimpSample
                 RenderNode(render_m_scene, node.Children[i]);
             }
             gl.PopMatrix();
+        }
+
+        private void LoadTextures()
+        {
+            int texCount = 0;
+            foreach(var render_m_scene in m_scene)
+            foreach (Material material in render_m_scene.Materials)
+            {
+                foreach (TextureSlot texSlot in material.GetAllTextures())
+                {
+                    texCount++;
+                }
+            }
+
+            m_texIds = new uint[texCount];
+            gl.GenTextures(texCount, m_texIds);
+
+            int index = 0;
+            for (int i = 0; i<m_scene.Count;i++)
+                foreach (Material material in m_scene[i].Materials)
+            {
+                foreach (TextureSlot texSlot in material.GetAllTextures())
+                {
+                    m_texMappings[texSlot] = m_texIds[index];
+
+                    // Pridruzi teksturu odgovarajucem identifikatoru.
+                    gl.BindTexture(OpenGL.GL_TEXTURE_2D, m_texIds[index]);
+
+                    // Formiranje putanje do fajla koji predstavlja teksturu.
+                    String fileName = Path.Combine(m_scenePath[i], texSlot.FilePath.StartsWith("/") ? texSlot.FilePath.Substring(1) : texSlot.FilePath);
+                    if (!File.Exists(fileName))
+                        throw new ArgumentException();
+
+                    // Ucitavanje teksture iz datog fajla.
+                    Bitmap textureBitmap = new Bitmap(fileName);
+                    BitmapData textureData = textureBitmap.LockBits(new Rectangle(0, 0, textureBitmap.Width, textureBitmap.Height), ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
+                    gl.TexImage2D(OpenGL.GL_TEXTURE_2D, 0, OpenGL.GL_RGBA8, textureData.Width, textureData.Height, 0, OpenGL.GL_BGRA, OpenGL.GL_UNSIGNED_BYTE, textureData.Scan0);
+
+                    // Podesavanje filtriranja teksture.
+                    gl.TexParameter(OpenGL.GL_TEXTURE_2D, OpenGL.GL_TEXTURE_MIN_FILTER, OpenGL.GL_LINEAR);
+                    gl.TexParameter(OpenGL.GL_TEXTURE_2D, OpenGL.GL_TEXTURE_MAG_FILTER, OpenGL.GL_LINEAR);
+
+                    // Podesavanje ponavljanja teksture za dati materijal. 
+                    if (texSlot.WrapModeU == TextureWrapMode.Clamp)
+                        gl.TexParameter(OpenGL.GL_TEXTURE_2D, OpenGL.GL_TEXTURE_WRAP_S, OpenGL.GL_CLAMP);
+                    if (texSlot.WrapModeV == TextureWrapMode.Clamp)
+                        gl.TexParameter(OpenGL.GL_TEXTURE_2D, OpenGL.GL_TEXTURE_WRAP_T, OpenGL.GL_CLAMP);
+                    if (texSlot.WrapModeU == TextureWrapMode.Wrap)
+                        gl.TexParameter(OpenGL.GL_TEXTURE_2D, OpenGL.GL_TEXTURE_WRAP_S, OpenGL.GL_REPEAT);
+                    if (texSlot.WrapModeV == TextureWrapMode.Wrap)
+                        gl.TexParameter(OpenGL.GL_TEXTURE_2D, OpenGL.GL_TEXTURE_WRAP_T, OpenGL.GL_REPEAT);
+
+                    // Oslobadjanje resursa teksture.
+                    textureBitmap.UnlockBits(textureData);
+                    textureBitmap.Dispose();
+
+                    index++;
+                }
+            }
+        }
+
+        private void ApplyMaterial(Material material)
+        {
+            // Primena ambijentalne komponente datog materijala. U slucaju da ista nije definisana, koristi se podrazumevana vrednost.
+            float[] ambientColor = material.HasColorAmbient ? new float[] { material.ColorAmbient.R, material.ColorAmbient.G, material.ColorAmbient.B, material.ColorAmbient.A } : new float[] { 0.2f, 0.2f, 0.2f, 1.0f };
+            gl.Material(OpenGL.GL_FRONT_AND_BACK, OpenGL.GL_AMBIENT, ambientColor);
+
+            // Primena difuzne komponente datog materijala. U slucaju da ista nije definisana, koristi se podrazumevana vrednost.
+            float[] diffuseColor = material.HasColorDiffuse ? new float[] { material.ColorDiffuse.R, material.ColorDiffuse.G, material.ColorDiffuse.B, material.ColorDiffuse.A } : new float[] { 0.8f, 0.8f, 0.8f, 1.0f };
+            gl.Material(OpenGL.GL_FRONT_AND_BACK, OpenGL.GL_DIFFUSE, diffuseColor);
+
+            // Primena spekularne komponente datog materijala. U slucaju da ista nije definisana, koristi se podrazumevana vrednost.
+            float[] specularColor = material.HasColorSpecular ? new float[] { material.ColorSpecular.R, material.ColorSpecular.G, material.ColorSpecular.B, material.ColorSpecular.A } : new float[] { 0.0f, 0.0f, 0.0f, 1.0f };
+            gl.Material(OpenGL.GL_FRONT_AND_BACK, OpenGL.GL_SPECULAR, specularColor);
+
+
+            // Primena emisione komponente datog materijala. U slucaju da ista nije definisana, koristi se podrazumevana vrednost.
+            float[] emissiveColor = material.HasColorEmissive ? new float[] { material.ColorEmissive.R, material.ColorEmissive.G, material.ColorEmissive.B, material.ColorEmissive.A } : new float[] { 0.0f, 0.0f, 0.0f, 1.0f };
+            gl.Material(OpenGL.GL_FRONT_AND_BACK, OpenGL.GL_EMISSION, emissiveColor);
+
+            // Primena sjaja materijala. U slucaju da ista nije definisana, koristi se podrazumevana vrednost.
+            float shininess = material.HasShininess ? material.Shininess : 1.0f;
+            float strength = material.HasShininessStrength ? material.ShininessStrength : 1.0f;
+            gl.Material(OpenGL.GL_FRONT_AND_BACK, OpenGL.GL_SHININESS, shininess * strength);
         }
 
         /// <summary>

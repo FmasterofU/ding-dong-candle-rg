@@ -14,6 +14,13 @@ using SharpGL.SceneGraph.Primitives;
 using SharpGL.SceneGraph.Quadrics;
 using SharpGL.SceneGraph.Core;
 using SharpGL;
+using SharpGL.SceneGraph.Quadrics;
+using SharpGL;
+using System;
+using System.Drawing;
+using System.Drawing.Imaging;
+using System.Windows.Threading;
+using System.Threading;
 
 namespace AssimpSample
 {
@@ -51,6 +58,11 @@ namespace AssimpSample
         /// </summary>
         private float m_yRotation = 0.0f;
 
+        private float m_plateRotation = 0.0f;
+        private float m_plateScale = 1.0f;
+        private float m_candleSpotDiffuse = 1.0f;
+        private bool m_animation = false;
+
         /// <summary>
         ///	 Udaljenost scene od kamere.
         /// </summary>
@@ -85,7 +97,7 @@ namespace AssimpSample
         public float RotationX
         {
             get { return m_xRotation; }
-            set { m_xRotation = value; }
+            set { m_xRotation = value < -20.0f ? m_xRotation : value>70.0f ? m_xRotation : value; }
         }
 
         /// <summary>
@@ -95,6 +107,30 @@ namespace AssimpSample
         {
             get { return m_yRotation; }
             set { m_yRotation = value; }
+        }
+
+        public float PlateRotation
+        {
+            get { return m_plateRotation; }
+            set { m_plateRotation = value; }
+        }
+
+        public float PlateScale
+        {
+            get { return m_plateScale; }
+            set { m_plateScale = value; }
+        }
+
+        public float CandleSpotDiffuse
+        {
+            get { return m_candleSpotDiffuse; }
+            set { m_candleSpotDiffuse = value<0? 0.0f: value>1?1.0f:value; }
+        }
+
+        public bool Animation
+        {
+            get { return m_animation; }
+            set { m_animation = value; }
         }
 
         /// <summary>
@@ -123,6 +159,8 @@ namespace AssimpSample
             get { return m_height; }
             set { m_height = value; }
         }
+
+        public DispatcherTimer Timer { get; private set; }
 
         #endregion Properties
 
@@ -162,20 +200,135 @@ namespace AssimpSample
             gl.Enable(OpenGL.GL_DEPTH_TEST);
             gl.Enable(OpenGL.GL_CULL_FACE);
             gl.FrontFace(OpenGL.GL_CCW);
-            gl.Enable(OpenGL.GL_COLOR_MATERIAL);
-            gl.ColorMaterial(OpenGL.GL_FRONT_AND_BACK, OpenGL.GL_AMBIENT_AND_DIFFUSE);
+            SetupTex(gl);
             m_scene.LoadScene();
             m_scene.Initialize();
         }
 
-
-        private void DefaultQUAD(OpenGL gl)
+        public void Animate()
         {
+            Timer = new DispatcherTimer();
+            Timer.Interval = TimeSpan.FromMilliseconds(5);
+            Timer.Tick += new EventHandler(UpdateAnimation);
+            Timer.Start();
+        }
+
+        private int stage = 0;
+        private int units = 0, short_path_unit_len = 150;
+        private float pos_x = 0, pos_z = 0;
+
+        private void UpdateAnimation(object sender, EventArgs e)
+        {
+            if (stage == 6)
+            {
+                m_animation = false;
+                Timer.Stop();
+                stage = -1;
+                pos_x = 0; 
+                pos_z = 0;
+            }
+            else
+            {
+                if (stage == 0 || stage == -1)
+                {
+                    if (units < short_path_unit_len)
+                    {
+                        units += 1;
+                        pos_z = -units;
+                    }
+                    else
+                    {
+                        units = 0;
+                        stage = 1;
+                    }
+                }
+                else if (stage == 1)
+                {
+                    if (units < short_path_unit_len)
+                    {
+                        units += 1;
+                        pos_x = -units;
+                    }
+                    else
+                    {
+                        units = 0;
+                        stage = 2;
+                    }
+                }
+                else if (stage == 2)
+                {
+                    if (units < 2* short_path_unit_len)
+                    {
+                        units += 1;
+                        pos_z = -short_path_unit_len + units;
+                    }
+                    else
+                    {
+                        units = 0;
+                        stage = 3;
+                    }
+                }
+                else if (stage == 3)
+                {
+                    if (units < 2* short_path_unit_len)
+                    {
+                        units += 1;
+                        pos_x = -short_path_unit_len + units;
+                    }
+                    else
+                    {
+                        units = 0;
+                        stage = 4;
+                    }
+                }
+                else if (stage == 4)
+                {
+                    if (units < short_path_unit_len)
+                    {
+                        units += 1;
+                        pos_z = short_path_unit_len - units;
+                    }
+                    else
+                    {
+                        units = 0;
+                        stage = 5;
+                    }
+                }
+                else if (stage == 5)
+                {
+                    if (units < short_path_unit_len)
+                    {
+                        units += 1;
+                        pos_x = short_path_unit_len - units;
+                    }
+                    else
+                    {
+                        units = 0;
+                        stage = 6;
+                    }
+                }
+
+            }
+        }
+
+        private void DefaultQUAD(OpenGL gl, int texId, bool parquet=false)
+        {
+            gl.BindTexture(OpenGL.GL_TEXTURE_2D, m_textures[texId]);
+            gl.MatrixMode(OpenGL.GL_TEXTURE);
+            gl.LoadIdentity();
+            if(parquet)
+                gl.Scale(3, 3, 3);
+            gl.MatrixMode(OpenGL.GL_MODELVIEW);
             gl.Begin(OpenGL.GL_QUADS);
             gl.Vertex(400.0f, 400.0f, 0.0f);
+            gl.TexCoord(1.0f, 0.0f);
             gl.Vertex(-400.0f, 400.0f, 0.0f);
+            gl.TexCoord(0.0f, 0.0f);
             gl.Vertex(-400.0f, -400.0f, 0.0f);
+            gl.TexCoord(0.0f, 1.0f);
             gl.Vertex(400.0f, -400.0f, 0.0f);
+            gl.TexCoord(1.0f, 1.0f);
+            gl.Normal(0.0f, 0.0f, 1.0f);
             gl.End();
         }
 
@@ -186,58 +339,76 @@ namespace AssimpSample
         public void Draw(OpenGL gl)
         {
             gl.Clear(OpenGL.GL_COLOR_BUFFER_BIT | OpenGL.GL_DEPTH_BUFFER_BIT);
-
             //gl.Viewport(0, 0, m_width, m_height);
 
-
+            SetupLighting(gl);
 
             //gl.MatrixMode(OpenGL.GL_MODELVIEW);   // selektuj ModelView Matrix
             gl.PushMatrix();
-            gl.Translate(0.0f, 0.0f, -m_sceneDistance);
+            gl.Translate(0.0f, 200.0f, -m_sceneDistance);
+            //float[] lightposition = { 0.0f, 700.0f, 0.0f, 1.0f };
+            //gl.Light(OpenGL.GL_LIGHT0, OpenGL.GL_POSITION, lightposition);
+            //float[] lightdirection = { 0.0f, -1.0f, 0.0f };
+            //gl.Light(OpenGL.GL_LIGHT0, OpenGL.GL_SPOT_DIRECTION, lightdirection);
+            //gl.Light(OpenGL.GL_LIGHT0, OpenGL.GL_SPOT_CUTOFF, 180.0f);
+            //gl.Enable(OpenGL.GL_LIGHT0);
             gl.Rotate(m_xRotation, 1.0f, 0.0f, 0.0f);
             gl.Rotate(m_yRotation, 0.0f, 1.0f, 0.0f);
+            gl.PushMatrix();
+            if (stage != -1)
+            {
+                gl.Translate(pos_x, 0.0f, pos_z);
+            }
+            gl.Translate(0.0f, -200.0f, 0.0f);
+            gl.Rotate(m_plateRotation, 0.0f, 1.0f, 0.0f);
+            gl.Translate(0.0f, -200.0f, 0.0f);
+            gl.Scale(m_plateScale, m_plateScale, m_plateScale);
+            pointLightCaster(gl);
+            gl.Translate(0.0f, 200.0f, 0.0f);
             m_scene.Draw();
+            gl.PopMatrix();
+
             //gl.LoadIdentity();
             gl.PushMatrix();
             gl.Color(0.5f, 0.0f, 0.1f);
             gl.Translate(0.0f, -410.0f, 0.0f);
             gl.Rotate(-90.0f, 1.0f, 0.0f, 0.0f);
-            DefaultQUAD(gl);
+            DefaultQUAD(gl,1, true);
             gl.PopMatrix();
 
             gl.PushMatrix();
             gl.Color(0.3f, 0.05f, 0.1f);
             gl.Translate(400.0f, -10.0f, 0.0f);
             gl.Rotate(-90.0f, 0.0f, 1.0f, 0.0f);
-            DefaultQUAD(gl);
+            DefaultQUAD(gl,0);
             gl.PopMatrix();
+
+            /*gl.PushMatrix();
+            gl.Color(0.3f, 0.05f, 0.1f);
+            gl.Translate(-400.0f, -10.0f, 0.0f);
+            gl.Rotate(-270.0f, 0.0f, 1.0f, 0.0f);
+            DefaultQUAD(gl,1);
+            gl.PopMatrix();*/
 
             gl.PushMatrix();
             gl.Color(0.3f, 0.05f, 0.1f);
             gl.Translate(-400.0f, -10.0f, 0.0f);
             gl.Rotate(-270.0f, 0.0f, 1.0f, 0.0f);
-            DefaultQUAD(gl);
-            gl.PopMatrix();
-
-            gl.PushMatrix();
-            gl.Color(0.3f, 0.05f, 0.1f);
-            gl.Translate(-400.0f, -10.0f, 0.0f);
-            gl.Rotate(-270.0f, 0.0f, 1.0f, 0.0f);
-            DefaultQUAD(gl);
+            DefaultQUAD(gl,0);
             gl.PopMatrix();
 
             gl.PushMatrix();
             gl.Color(0.8f, 1.0f, 0.3f);
             gl.Translate(0.0f, -10.0f, -400.0f);
             //gl.Rotate(-180.0f, 0.0f, 1.0f, 0.0f);
-            DefaultQUAD(gl);
+            DefaultQUAD(gl,0);
             gl.PopMatrix();
 
             gl.PushMatrix();
             gl.Color(0.8f, 1.0f, 0.3f);
             gl.Translate(0.0f, -10.0f, 400.0f);
             gl.Rotate(-180.0f, 0.0f, 1.0f, 0.0f);
-            DefaultQUAD(gl);
+            DefaultQUAD(gl,0);
             gl.PopMatrix();
 
 
@@ -390,6 +561,10 @@ namespace AssimpSample
             gl.MatrixMode(OpenGL.GL_PROJECTION);      // selektuj Projection Matrix
             gl.LoadIdentity();
             gl.Perspective(45f, (double)width / height, 1.0f, 20000f);
+            if(stage == -1 || stage == 0 || stage == 4 || stage == 6) gl.LookAt(pos_x, 500.0f, -m_sceneDistance/ 5.0f + pos_z, pos_x, 150.0f, -m_sceneDistance + pos_z, 0f, 1f, 0f);
+            else if (stage == 1 || stage == 5) gl.LookAt(-m_sceneDistance / 5.0f - (-m_sceneDistance) + pos_z, 500.0f, -m_sceneDistance + pos_z, pos_x, 150.0f, -m_sceneDistance + pos_z, 0f, 1f, 0f);
+            else if (stage == 2) gl.LookAt(pos_x, 500.0f, -2*m_sceneDistance+m_sceneDistance / 5.0f + pos_z, pos_x, 150.0f, -m_sceneDistance + pos_z, 0f, 1f, 0f);
+            else if (stage == 3) gl.LookAt(-(-m_sceneDistance / 5.0f - (-m_sceneDistance)) + pos_z, 500.0f, -m_sceneDistance + pos_z, pos_x, 150.0f, -m_sceneDistance + pos_z, 0f, 1f, 0f);
             gl.MatrixMode(OpenGL.GL_MODELVIEW);
             gl.LoadIdentity();                // resetuj ModelView Matrix
         }
@@ -419,5 +594,98 @@ namespace AssimpSample
         }
 
         #endregion IDisposable metode
+
+        private void SetupLighting(OpenGL gl)
+        {
+            
+            gl.Enable(OpenGL.GL_COLOR_MATERIAL);
+            gl.ColorMaterial(OpenGL.GL_FRONT_AND_BACK, OpenGL.GL_AMBIENT_AND_DIFFUSE);
+            gl.Enable(OpenGL.GL_LIGHTING);
+            gl.Enable(OpenGL.GL_NORMALIZE);
+            float[] global_ambient = new float[] { 0.2f, 0.2f, 0.2f, 1.0f };
+            gl.LightModel(OpenGL.GL_LIGHT_MODEL_AMBIENT, global_ambient);
+            //pointLightCaster(gl);
+            spotLightCaster(gl);
+        }
+
+        private void pointLightCaster(OpenGL gl)
+        {
+            
+            gl.Light(OpenGL.GL_LIGHT1, OpenGL.GL_POSITION, new float[] { 0.0f, 410.0f, 0f, 1.0f });
+            gl.Light(OpenGL.GL_LIGHT1, OpenGL.GL_AMBIENT, new float[] { 0.5f, 0.5f, 0.5f, 1.0f });
+            gl.Light(OpenGL.GL_LIGHT1, OpenGL.GL_DIFFUSE, new float[] { m_candleSpotDiffuse, m_candleSpotDiffuse, m_candleSpotDiffuse, 1.0f });
+            gl.Light(OpenGL.GL_LIGHT1, OpenGL.GL_SPECULAR, new float[] { 1f, 0f, 0f, 1.0f });
+            gl.Light(OpenGL.GL_LIGHT1, OpenGL.GL_SPOT_CUTOFF, 180.0f);
+            gl.Light(OpenGL.GL_LIGHT0, OpenGL.GL_SPOT_DIRECTION, new float[] { 0.0f, 1.0f, 0.0f, 1.0f });
+            //gl.Material(OpenGL.GL_FRONT, OpenGL.GL_SPECULAR, PointSpecular);
+            gl.Material(OpenGL.GL_FRONT, OpenGL.GL_SHININESS, 100.0f);
+            gl.Enable(OpenGL.GL_LIGHT1);
+            
+        }
+
+        private void spotLightCaster(OpenGL gl)
+        {
+
+            float[] ambijentalnaKomponenta = { 0.192f, 0.192f, 0.192f, 1.0f };//SpotlightAmbient;
+            float[] difuznaKomponenta = { 0.507f, 0.507f, 0.507f, 1.0f };//SpotlightDiffuse;
+            float[] spekularnaKomponenta = { 0.508f, 0.508f, 0.508f, 1.0f }; //SpotlightSpecular;
+            float[] direction = { 0.0f, -1.0f, 0.0f, 1.0f};
+            float[] position = { 0.0f, 700.0f, -m_sceneDistance, 1.0f };
+
+            gl.Light(OpenGL.GL_LIGHT0, OpenGL.GL_AMBIENT, ambijentalnaKomponenta);
+            gl.Light(OpenGL.GL_LIGHT0, OpenGL.GL_DIFFUSE, difuznaKomponenta);
+            gl.Light(OpenGL.GL_LIGHT0, OpenGL.GL_SPECULAR, spekularnaKomponenta);
+            gl.Light(OpenGL.GL_LIGHT0, OpenGL.GL_SHININESS, 51.2f);
+            gl.Light(OpenGL.GL_LIGHT0, OpenGL.GL_SPOT_CUTOFF, 180.0f);
+            gl.Light(OpenGL.GL_LIGHT0, OpenGL.GL_POSITION, position);
+            gl.Light(OpenGL.GL_LIGHT0, OpenGL.GL_SPOT_DIRECTION, direction);
+            gl.Enable(OpenGL.GL_LIGHT0);
+
+
+        }
+        public static uint[] m_textures = new uint[2];
+        private void SetupTex(OpenGL gl)
+        {
+            gl.Enable(OpenGL.GL_TEXTURE_2D); 
+            gl.GenTextures(2, m_textures);
+            for(int i = 0; i < 2; i++)
+            {
+                gl.BindTexture(OpenGL.GL_TEXTURE_2D, m_textures[i]);
+                Bitmap image = null;
+                if(i==0) image = new Bitmap("..//..//Tex//brick.png");
+                else image = new Bitmap("..//..//Tex//parquet.jpg");
+                image.RotateFlip(RotateFlipType.Rotate90FlipNone);
+                Rectangle rect = new Rectangle(0, 0, image.Width, image.Height);
+                BitmapData imageData = image.LockBits(rect, System.Drawing.Imaging.ImageLockMode.ReadOnly, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+                gl.Build2DMipmaps(OpenGL.GL_TEXTURE_2D, (int)OpenGL.GL_RGBA8, image.Width, image.Height, OpenGL.GL_BGRA, OpenGL.GL_UNSIGNED_BYTE, imageData.Scan0);
+                gl.TexParameter(OpenGL.GL_TEXTURE_2D, OpenGL.GL_TEXTURE_WRAP_S, OpenGL.GL_REPEAT);
+                gl.TexParameter(OpenGL.GL_TEXTURE_2D, OpenGL.GL_TEXTURE_WRAP_T, OpenGL.GL_REPEAT);
+                gl.TexParameter(OpenGL.GL_TEXTURE_2D, OpenGL.GL_TEXTURE_MIN_FILTER, OpenGL.GL_LINEAR_MIPMAP_LINEAR);
+                gl.TexParameter(OpenGL.GL_TEXTURE_2D, OpenGL.GL_TEXTURE_MAG_FILTER, OpenGL.GL_LINEAR_MIPMAP_LINEAR);
+                gl.TexEnv(OpenGL.GL_TEXTURE_ENV, OpenGL.GL_TEXTURE_ENV_MODE, OpenGL.GL_ADD);
+                image.UnlockBits(imageData);
+                image.Dispose();
+            }
+            /*for (int i = 0; i < m_textureCount; ++i)
+            {
+
+                // Pridruzi teksturu odgovarajucem identifikatoru
+                gl.BindTexture(OpenGL.GL_TEXTURE_2D, m_textures[i]);
+
+                Bitmap image = new Bitmap(m_textureFiles[i]);
+                image.RotateFlip(RotateFlipType.RotateNoneFlipY);
+                Rectangle rect = new Rectangle(0, 0, image.Width, image.Height);
+                BitmapData imageData = image.LockBits(rect, System.Drawing.Imaging.ImageLockMode.ReadOnly,
+                                                      System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+
+                gl.Build2DMipmaps(OpenGL.GL_TEXTURE_2D, (int)OpenGL.GL_RGBA8, image.Width, image.Height, OpenGL.GL_BGRA, OpenGL.GL_UNSIGNED_BYTE, imageData.Scan0);
+                gl.TexParameter(OpenGL.GL_TEXTURE_2D, OpenGL.GL_TEXTURE_MIN_FILTER, OpenGL.GL_NEAREST_MIPMAP_NEAREST);
+                //gl.TexParameter(OpenGL.GL_TEXTURE_2D, OpenGL.GL_TEXTURE_MAG_FILTER, OpenGL.GL_NEAREST_MIPMAP_NEAREST); //TODO: Sjebava tekst iz nekog razloga
+                
+
+                image.UnlockBits(imageData);
+                image.Dispose();
+            }*/
+        }
     }
 }

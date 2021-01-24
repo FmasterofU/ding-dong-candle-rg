@@ -94,16 +94,24 @@ namespace AssimpSample
 
         private void Window_KeyDown(object sender, KeyEventArgs e)
         {
+            if (m_world.Animation) return;
             switch (e.Key)
             {
-                case Key.F10: this.Close(); break;
-                case Key.W: m_world.RotationX -= 5.0f; break;
-                case Key.S: m_world.RotationX += 5.0f; break;
-                case Key.A: m_world.RotationY -= 5.0f; break;
-                case Key.D: m_world.RotationY += 5.0f; break;
+                case Key.F5: this.Close(); break;
+                case Key.T: m_world.RotationX -= 5.0f; break;
+                case Key.G: m_world.RotationX += 5.0f; break;
+                case Key.F: m_world.RotationY -= 5.0f; break;
+                case Key.H: m_world.RotationY += 5.0f; break;
+                case Key.A: m_world.PlateRotation -= 5.0f; break;
+                case Key.D: m_world.PlateRotation += 5.0f; break;
+                case Key.Multiply: m_world.PlateScale += 0.05f; break;
+                case Key.Divide: m_world.PlateScale -= 0.05f; break;
+                case Key.Z: m_world.CandleSpotDiffuse -= 0.05f; break;
+                case Key.X: m_world.CandleSpotDiffuse += 0.05f; break;
+                case Key.C: m_world.Animation = true; m_world.Animate(); break;
                 case Key.Add: m_world.SceneDistance -= 150.0f; break;
                 case Key.Subtract: m_world.SceneDistance += 150.0f; break;
-                case Key.F2:
+                /*case Key.F2:
                     OpenFileDialog opfModel = new OpenFileDialog();
                     bool result = (bool) opfModel.ShowDialog();
                     if (result)
@@ -127,7 +135,7 @@ namespace AssimpSample
                             MessageBox.Show("Neuspesno kreirana instanca OpenGL sveta:\n" + exp.Message, "GRESKA", MessageBoxButton.OK );
                         }
                     }
-                    break;
+                    break;*/
             }
         }
     }
